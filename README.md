@@ -19,9 +19,9 @@ The READY message uses the standard elapsed **50-minute estimate**. It is not a 
 
 ## Notifications
 
-The current public candidate always requests both READY channels: a red in-game RuneLite chat notification and a desktop notification. Visibility can also depend on RuneLite notification preferences, focus settings, Windows notification permissions and Do Not Disturb. The plugin's optional Demo mode is visual only and does not fire real notifications.
+The current public source candidate requests both READY channels: a red in-game RuneLite chat notification and a desktop notification. Visibility can also depend on RuneLite notification preferences, focus settings, Windows notification permissions and Do Not Disturb. The plugin's optional Demo mode is visual only and does not fire real notifications.
 
-If an alert is blocked or cannot be displayed, the current implementation does not automatically retry that cycle. Windows desktop behavior requires acceptance testing on a Windows client.
+If an alert is blocked or cannot be displayed, the current implementation does not automatically retry that cycle. Windows desktop notification behavior has been manually tested, but automatic READY notifications triggered by live birdhouse cycles still require acceptance testing.
 
 ## Building
 
@@ -31,13 +31,21 @@ Java 11 and Gradle 8.10 are recommended. From the source project directory, run:
 gradle clean test build
 ```
 
-If you already have a verified Gradle wrapper in another local development project, you can invoke that wrapper using `-p` to target this project; see the separate `WINDOWS\_ACCEPTANCE.md` in the delivery package. The standard Plugin Hub build replaces local Gradle configuration, so no custom build steps or external dependencies are required.
+If you already have a verified Gradle wrapper in another local development project, you can invoke that wrapper using `-p` to target this project.
+
+The standard Plugin Hub build replaces local Gradle configuration, so no custom build steps or external dependencies are required.
 
 ## Plugin Hub
 
-The project contains `runelite-plugin.properties` with `build=standard`. Public author attribution: VitaminWorld. Licensed under BSD 2-Clause. This is a **private production-preparation candidate** and is not yet published or approved for distribution.
+The project contains `runelite-plugin.properties` with `build=standard`.
 
-Source repository and support links: to be added after founder approval.
+* **Public author:** VitaminWorld
+* **License:** BSD 2-Clause
+* **Source repository:** https://github.com/VitaminWorldLabs/birdhouse-timer
+* **Issue reporting:** https://github.com/VitaminWorldLabs/birdhouse-timer/issues
+* **Release status:** Public source candidate. Not yet submitted to or published on RuneLite Plugin Hub.
+
+The current version is **v0.1.6**. Live gameplay acceptance and Plugin Hub review remain pending. Public source availability does not imply approval for distribution through RuneLite Plugin Hub.
 
 ## Disclaimer
 
