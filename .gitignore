@@ -1,0 +1,21 @@
+# Gradle, IDE, operating-system and generated artifacts
+.gradle/
+build/
+out/
+.idea/
+*.iml
+.classpath
+.project
+.settings/
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+# Local/private runtime state and secrets
+*.jks
+*.keystore
+*.p12
+*.key
+.env
+.env.*
+runelite/
