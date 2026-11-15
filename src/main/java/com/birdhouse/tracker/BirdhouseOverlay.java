@@ -16,9 +16,15 @@ final class BirdhouseOverlay extends OverlayPanel
 {
     static final int COMPACT_WIDTH_PX = 190;
     static final String EMPTY_STATE_MESSAGE = "No active birdhouses";
-    static final Color READY_COLOR = new Color(110, 230, 130);
+    static final String TITLE = "Birdhouse Timers";
+    static final String DEMO_TITLE = TITLE + " [DM]";
+    static final String TIME_TRACKING_INSTRUCTION_1 = "1. Open Configuration (wrench)";
+    static final String TIME_TRACKING_INSTRUCTION_2 = "2. Search Time Tracking";
+    static final String TIME_TRACKING_INSTRUCTION_3 = "3. Enable Time Tracking";
+    static final Color READY_COLOR = new Color(0, 255, 0); // Bright green to match RuneLite Farming READY text.
     static final Color SOON_COLOR = new Color(255, 220, 50);
     static final Color GROWING_COLOR = new Color(255, 80, 80);
+    static final Color DEPENDENCY_WARNING_COLOR = new Color(255, 190, 75);
 
     private final BirdhouseTrackerPlugin plugin;
     private final BirdhouseTrackerConfig config;
@@ -39,14 +45,39 @@ final class BirdhouseOverlay extends OverlayPanel
         List<BirdhouseTimer> timers = plugin.getTimers();
         panelComponent.setPreferredSize(new Dimension(COMPACT_WIDTH_PX, 0));
         panelComponent.getChildren().add(TitleComponent.builder()
-            .text(config.demoMode() ? "Birdhouses [DEMO]" : "Birdhouses")
+            .text(config.demoMode() ? DEMO_TITLE : TITLE)
             .build());
 
-        if (timers.isEmpty())
+        boolean dependencyWarning = TimeTrackingDependencyStatus.shouldShowOverlayWarning(
+            config.demoMode(), plugin.isTimeTrackingStatusKnownForOverlay(),
+            plugin.isTimeTrackingActiveForOverlay());
+        if (dependencyWarning)
+        {
+            panelComponent.getChildren().add(new BirdhouseDependencyWarningComponent());
+            panelComponent.getChildren().add(LineComponent.builder()
+                .left("To enable:")
+                .build());
+            panelComponent.getChildren().add(LineComponent.builder()
+                .left(TIME_TRACKING_INSTRUCTION_1)
+                .build());
+            panelComponent.getChildren().add(LineComponent.builder()
+                .left(TIME_TRACKING_INSTRUCTION_2)
+                .build());
+            panelComponent.getChildren().add(LineComponent.builder()
+                .left(TIME_TRACKING_INSTRUCTION_3)
+                .build());
+        }
+
+        if (shouldShowEmptyState(timers.isEmpty(), dependencyWarning))
         {
             panelComponent.getChildren().add(LineComponent.builder()
                 .left(EMPTY_STATE_MESSAGE)
                 .build());
+            return super.render(graphics);
+        }
+        if (timers.isEmpty())
+        {
+            // A dependency warning already explains why no current timers are shown.
             return super.render(graphics);
         }
 
@@ -58,11 +89,17 @@ final class BirdhouseOverlay extends OverlayPanel
             String label = timer.site.displayLabel();
             panelComponent.getChildren().add(LineComponent.builder()
                 .left(label)
+                .leftColor(Color.WHITE)
                 .right(timer.display(now))
                 .rightColor(statusColor)
                 .build());
         }
         return super.render(graphics);
+    }
+
+    static boolean shouldShowEmptyState(boolean timersEmpty, boolean dependencyWarning)
+    {
+        return timersEmpty && !dependencyWarning;
     }
 
     /** The existing advance-warning preference also controls the yellow visual cue. */

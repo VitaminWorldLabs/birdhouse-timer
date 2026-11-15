@@ -3,13 +3,33 @@ package com.birdhouse.tracker;
 import org.junit.Test;
 import static org.junit.Assert.*;
 
-/** Focused visual-state regression tests for v0.1.5. */
+/** Focused visual-state regression tests for the Birdhouse Timer release. */
 public class BirdhousePresentationTest
 {
     @Test
     public void emptyStateHasExactPlayerRequestedMessage()
     {
         assertEquals("No active birdhouses", BirdhouseOverlay.EMPTY_STATE_MESSAGE);
+    }
+
+    @Test
+    public void dependencyWarningReplacesEmptyStateInsteadOfShowingBoth()
+    {
+        assertFalse(BirdhouseOverlay.shouldShowEmptyState(true, true));
+        assertTrue(BirdhouseOverlay.shouldShowEmptyState(true, false));
+        assertFalse(BirdhouseOverlay.shouldShowEmptyState(false, true));
+        assertFalse(BirdhouseOverlay.shouldShowEmptyState(false, false));
+        assertEquals(new java.awt.Color(255, 190, 75), BirdhouseOverlay.DEPENDENCY_WARNING_COLOR);
+    }
+
+    @Test
+    public void dependencyWarningContainsRequiredActionableInstructions()
+    {
+        assertEquals("Time Tracking Disabled", BirdhouseDependencyWarningComponent.LABEL);
+        assertEquals(new java.awt.Color(255, 190, 75), BirdhouseDependencyWarningComponent.ICON_COLOR);
+        assertEquals("1. Open Configuration (wrench)", BirdhouseOverlay.TIME_TRACKING_INSTRUCTION_1);
+        assertEquals("2. Search Time Tracking", BirdhouseOverlay.TIME_TRACKING_INSTRUCTION_2);
+        assertEquals("3. Enable Time Tracking", BirdhouseOverlay.TIME_TRACKING_INSTRUCTION_3);
     }
 
     @Test
@@ -28,9 +48,36 @@ public class BirdhousePresentationTest
     {
         assertEquals(new java.awt.Color(255, 80, 80), BirdhouseOverlay.GROWING_COLOR);
         assertEquals(new java.awt.Color(255, 220, 50), BirdhouseOverlay.SOON_COLOR);
-        assertEquals(new java.awt.Color(110, 230, 130), BirdhouseOverlay.READY_COLOR);
+        assertEquals(new java.awt.Color(0, 255, 0), BirdhouseOverlay.READY_COLOR);
         assertNotEquals(BirdhouseOverlay.GROWING_COLOR, BirdhouseOverlay.SOON_COLOR);
         assertNotEquals(BirdhouseOverlay.SOON_COLOR, BirdhouseOverlay.READY_COLOR);
+    }
+
+    @Test
+    public void readyStatusUsesBrightGreenWhileGrowingAndWarningColorsRemainUnchanged()
+    {
+        assertEquals(new java.awt.Color(0, 255, 0), BirdhouseOverlay.READY_COLOR);
+        assertEquals(BirdhouseOverlay.READY_COLOR,
+            BirdhouseOverlay.statusColor(0, WarningLeadTime.TEN));
+        assertEquals(BirdhouseOverlay.READY_COLOR,
+            BirdhouseOverlay.statusColor(-1, WarningLeadTime.TEN));
+        assertEquals(new java.awt.Color(255, 80, 80), BirdhouseOverlay.GROWING_COLOR);
+        assertEquals(new java.awt.Color(255, 220, 50), BirdhouseOverlay.SOON_COLOR);
+        assertEquals(190, BirdhouseOverlay.COMPACT_WIDTH_PX);
+    }
+
+    @Test
+    public void allFourSiteReadyStatusesUseBrightGreenAndNamesStayWhiteByDefault()
+    {
+        assertEquals(new java.awt.Color(0, 255, 0), BirdhouseOverlay.READY_COLOR);
+        for (BirdhouseSite site : BirdhouseSite.displayOrder())
+        {
+            assertNotNull(site.displayLabel());
+            assertEquals(BirdhouseOverlay.READY_COLOR,
+                BirdhouseOverlay.statusColor(0, WarningLeadTime.TEN));
+        }
+        assertEquals(4, BirdhouseSite.displayOrder().size());
+        // LineComponent defaults its left text to white; the overlay also sets leftColor explicitly.
     }
 
     @Test
@@ -83,5 +130,6 @@ public class BirdhousePresentationTest
     public void compactWidthRemainsUnchanged()
     {
         assertEquals(190, BirdhouseOverlay.COMPACT_WIDTH_PX);
+        assertEquals("Birdhouse Timers", BirdhouseOverlay.TITLE);
     }
 }

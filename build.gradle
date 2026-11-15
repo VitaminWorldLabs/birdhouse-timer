@@ -12,7 +12,6 @@ repositories {
 }
 
 def runeLiteVersion = 'latest.release'
-def pluginMainClass = 'com.birdhouse.tracker.BirdhouseTrackerPluginTest'
 
 dependencies {
     compileOnly group: 'net.runelite', name: 'client', version: runeLiteVersion
@@ -22,16 +21,9 @@ dependencies {
 }
 
 group = 'com.birdhouse.tracker'
-version = '0.1.6'
+version = '1.1.0'
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
     options.release.set(11)
-}
-
-tasks.register('run', JavaExec) {
-    classpath = sourceSets.test.runtimeClasspath
-    mainClass = pluginMainClass
-    jvmArgs '-ea'
-    args '--developer-mode', '--debug'
 }

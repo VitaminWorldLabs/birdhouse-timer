@@ -30,7 +30,7 @@ final class BirdhouseWarningMessage
             + " ready within " + leadMinutes + " minutes: " + locations + ".";
     }
 
-    /** One estimated READY alert for all sites crossing 50 minutes in this refresh. */
+    /** One approved estimated READY message for a single coalesced event batch. */
     static String formatReady(List<BirdhouseTimer> newlyReady)
     {
         if (newlyReady == null || newlyReady.isEmpty())
