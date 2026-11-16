@@ -93,14 +93,4 @@ public class BirdhouseTimerRegressionTest
         assertEquals(10, WarningLeadTime.TEN.minutes);
         assertEquals(15, WarningLeadTime.FIFTEEN.minutes);
     }
-
-    @Test
-    public void demoValuesAreIndependentFromNormalSavedRecords()
-    {
-        java.util.List<BirdhouseTimer> demos = BirdhouseTimer.demoTimers(NOW);
-        assertEquals(4, demos.size());
-        assertEquals("READY", demos.get(0).display(NOW));
-        assertEquals("04:00", demos.get(1).display(NOW));
-        assertNull(BirdhouseTimer.parse(BirdhouseSite.VALLEY_NORTH, null, NOW));
-    }
 }

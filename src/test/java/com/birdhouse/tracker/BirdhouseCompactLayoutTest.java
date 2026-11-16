@@ -15,6 +15,27 @@ public class BirdhouseCompactLayoutTest
     }
 
     @Test
+    public void overlayUsesTheApprovedTitleAndFitsTheCompactWidth()
+    {
+        assertEquals("Birdhouse Timers", BirdhouseOverlay.TITLE);
+        assertEquals(190, BirdhouseOverlay.COMPACT_WIDTH_PX);
+
+        java.awt.Graphics2D graphics = new java.awt.image.BufferedImage(
+            1, 1, java.awt.image.BufferedImage.TYPE_INT_ARGB).createGraphics();
+        try
+        {
+            graphics.setFont(new java.awt.Font("Dialog", java.awt.Font.PLAIN, 16));
+            int contentWidth = BirdhouseOverlay.COMPACT_WIDTH_PX - 8; // RuneLite's 4px border on each side.
+            int titleWidth = graphics.getFontMetrics().stringWidth(BirdhouseOverlay.TITLE);
+            assertTrue(titleWidth <= contentWidth);
+        }
+        finally
+        {
+            graphics.dispose();
+        }
+    }
+
+    @Test
     public void noCompactOrStandardSwitchIsExposed()
     {
         for (Method method : BirdhouseTrackerConfig.class.getDeclaredMethods())

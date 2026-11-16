@@ -1,9 +1,8 @@
 package com.birdhouse.tracker;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
-/** One readable notification for all locations entering a warning window together. */
+/** Player-facing text for consolidated READY delivery. Advance warnings are visual only. */
 final class BirdhouseWarningMessage
 {
     static final String READY_TEXT =
@@ -13,24 +12,7 @@ final class BirdhouseWarningMessage
     {
     }
 
-    static String format(List<BirdhouseTimer> newlyWarned, int leadMinutes)
-    {
-        if (newlyWarned == null || newlyWarned.isEmpty())
-        {
-            throw new IllegalArgumentException("At least one birdhouse is required");
-        }
-        if (leadMinutes <= 0)
-        {
-            throw new IllegalArgumentException("Warning lead time must be positive");
-        }
-        String locations = newlyWarned.stream()
-            .map(timer -> timer.site.displayLabel())
-            .collect(Collectors.joining(", "));
-        return (newlyWarned.size() == 1 ? "Birdhouse" : "Birdhouses")
-            + " ready within " + leadMinutes + " minutes: " + locations + ".";
-    }
-
-    /** One estimated READY alert for all sites crossing 50 minutes in this refresh. */
+    /** One approved estimated READY message for one completed planting group. */
     static String formatReady(List<BirdhouseTimer> newlyReady)
     {
         if (newlyReady == null || newlyReady.isEmpty())
