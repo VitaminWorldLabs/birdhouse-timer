@@ -4,13 +4,14 @@ import com.google.inject.Provides;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import javax.inject.Inject;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
-import net.runelite.client.Notifier;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.PluginChanged;
@@ -19,22 +20,28 @@ import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.plugins.PluginManager;
 import net.runelite.client.plugins.timetracking.TimeTrackingPlugin;
 import net.runelite.client.ui.overlay.OverlayManager;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Read-only display of RuneLite's built-in Time Tracking birdhouse records.
- * The only saved records this plugin writes are its own notification markers.
+ * The plugin writes only its own warning, migration and notification metadata.
  */
 @PluginDescriptor(
     name = "Birdhouse Timer",
-    description = "Visible planted birdhouse countdowns and advance warnings. "
-        + "READY: The standard 50-minute birdhouse timer has elapsed. The birdhouse is estimated to be ready for harvesting, but completion is not guaranteed.",
+    description = "Four independent estimated birdhouse countdowns with one READY reminder per five-minute planting group. "
+        + "READY: The standard 50-minute estimate has elapsed; actual harvestability is not guaranteed.",
     tags = {"birdhouse", "hunter", "fossilisland", "timer"}
 )
 public class BirdhouseTrackerPlugin extends Plugin
 {
+    private static final Logger log = LoggerFactory.getLogger(BirdhouseTrackerPlugin.class);
     private static final String SOURCE_GROUP = "timetracking";
     private static final String OWN_GROUP = "birdhousetracker";
     private static final String TIME_TRACKING_WARNING_SENT_KEY = "timeTrackingDisabledWarningSent";
+    private static final String GROUP_CONFIG_PREFIX = "run.";
+    private static final String LAST_OBSERVED_EPOCH_KEY = "runLastObservedEpoch";
+    private static final long CLOCK_PERSIST_INTERVAL_SECONDS = 60L;
 
     @Inject private Client client;
     @Inject private ConfigManager configManager;
@@ -42,17 +49,18 @@ public class BirdhouseTrackerPlugin extends Plugin
     @Inject private BirdhouseTrackerConfig config;
     @Inject private OverlayManager overlayManager;
     @Inject private BirdhouseOverlay overlay;
-    @Inject private Notifier notifier;
     @Inject private BirdhouseNotificationDelivery notificationDelivery;
 
     private final TimeTrackingDependencyStatus timeTrackingStatus = new TimeTrackingDependencyStatus();
-    private final BirdhouseReadyNotificationBatcher readyBatcher = new BirdhouseReadyNotificationBatcher();
+    private final BirdhouseClockGuard clockGuard = new BirdhouseClockGuard();
     private TimeTrackingPlugin timeTrackingPlugin;
     private volatile boolean loggedIn;
     private boolean deferDependencyWarningUntilFirstGameTick;
+    private boolean startupReconciliationPending = true;
+    private boolean trackingWasActive;
+    private long lastPersistedObservedEpoch = Long.MIN_VALUE;
 
     private volatile List<BirdhouseTimer> timers = Collections.emptyList();
-    private volatile List<BirdhouseTimer> demoTimers = Collections.emptyList();
 
     @Provides
     BirdhouseTrackerConfig provideConfig(ConfigManager manager)
@@ -63,7 +71,10 @@ public class BirdhouseTrackerPlugin extends Plugin
     @Override
     protected void startUp()
     {
-        demoTimers = Collections.emptyList();
+        // BH-DEC-001: remove only the obsolete public preference. The plugin no longer
+        // reads this value, so a previous demoMode=true cannot enable simulation.
+        configManager.unsetConfiguration(OWN_GROUP, "demoMode");
+
         timeTrackingPlugin = pluginManager.getPlugins().stream()
             .filter(TimeTrackingPlugin.class::isInstance)
             .map(TimeTrackingPlugin.class::cast)
@@ -71,6 +82,11 @@ public class BirdhouseTrackerPlugin extends Plugin
             .orElse(null);
         loggedIn = client.getGameState() == GameState.LOGGED_IN;
         deferDependencyWarningUntilFirstGameTick = true;
+        startupReconciliationPending = true;
+        trackingWasActive = false;
+        clockGuard.reset();
+        lastPersistedObservedEpoch = parseEpoch(configManager.getRSProfileConfiguration(
+            OWN_GROUP, LAST_OBSERVED_EPOCH_KEY));
         overlayManager.add(overlay);
         refresh();
     }
@@ -80,8 +96,10 @@ public class BirdhouseTrackerPlugin extends Plugin
     {
         overlayManager.remove(overlay);
         timers = Collections.emptyList();
-        demoTimers = Collections.emptyList();
-        readyBatcher.clear();
+        if (loggedIn)
+        {
+            persistObservedEpoch(Math.max(Instant.now().getEpochSecond(), lastPersistedObservedEpoch));
+        }
     }
 
     @Subscribe
@@ -97,7 +115,13 @@ public class BirdhouseTrackerPlugin extends Plugin
     {
         if (event.getPlugin() == timeTrackingPlugin && !deferDependencyWarningUntilFirstGameTick)
         {
-            updateTimeTrackingStatus(event.isLoaded(), true);
+            boolean active = event.isLoaded() && isTimeTrackingActive();
+            updateTimeTrackingStatus(active, true);
+            // Record the transition immediately. A disable/enable pair can occur
+            // between GameTicks; relying only on polling could otherwise miss the
+            // outage and dispatch an overdue group as though tracking stayed active.
+            trackingWasActive = false;
+            startupReconciliationPending = true;
         }
     }
 
@@ -108,6 +132,9 @@ public class BirdhouseTrackerPlugin extends Plugin
         if (!loggedIn)
         {
             timers = Collections.emptyList();
+            startupReconciliationPending = true;
+            trackingWasActive = false;
+            clockGuard.reset();
         }
         else
         {
@@ -130,16 +157,15 @@ public class BirdhouseTrackerPlugin extends Plugin
         boolean wasActive = timeTrackingStatus.isActive();
         if (active && (!wasInitialized || !wasActive))
         {
-            // A transition into a new active episode resets only the dependency-warning latch.
+            // Reset only the dependency-warning latch for a new active episode.
             configManager.setConfiguration(OWN_GROUP, TIME_TRACKING_WARNING_SENT_KEY, false);
         }
 
-        boolean mayWarn = allowInitialWarning && loggedIn && !config.demoMode();
+        boolean mayWarn = allowInitialWarning && loggedIn;
         String warningSentValue = configManager.getConfiguration(OWN_GROUP, TIME_TRACKING_WARNING_SENT_KEY);
         boolean warningAlreadySent = Boolean.parseBoolean(warningSentValue);
         if (timeTrackingStatus.update(active, mayWarn, warningAlreadySent))
         {
-            // Persist before delivery so ticks and client restarts cannot spam.
             configManager.setConfiguration(OWN_GROUP, TIME_TRACKING_WARNING_SENT_KEY, true);
             notificationDelivery.sendTimeTrackingDisabledWarning();
         }
@@ -157,109 +183,222 @@ public class BirdhouseTrackerPlugin extends Plugin
 
     List<BirdhouseTimer> getTimers()
     {
-        if (!config.demoMode())
-        {
-            // Clearing the preview makes a later re-enable start fresh.
-            demoTimers = Collections.emptyList();
-            return timers;
-        }
-
-        List<BirdhouseTimer> preview = demoTimers;
-        if (preview.isEmpty())
-        {
-            preview = BirdhouseTimer.demoTimers(Instant.now().getEpochSecond());
-            demoTimers = preview;
-        }
-        return preview;
+        return timers;
     }
 
     private void refresh()
     {
-        // Demo mode is strictly visual: do not read/write account timers or
-        // issue real game notifications while the preview is enabled.
-        if (config.demoMode())
-        {
-            timers = Collections.emptyList();
-            return;
-        }
-        if (client.getGameState() != GameState.LOGGED_IN)
+        if (!loggedIn || client.getGameState() != GameState.LOGGED_IN)
         {
             timers = Collections.emptyList();
             return;
         }
 
-        long now = Instant.now().getEpochSecond();
-        // Flush a short coalescing window before observing this tick's new events.
-        // Pending cycle markers are written only when the combined alert is sent,
-        // so a restart before dispatch lets the next refresh safely rediscover them.
-        flushReadyBatch(now);
+        long wallNow = Instant.now().getEpochSecond();
+        long monotonicNow = System.nanoTime();
+        boolean clockDiscontinuity = clockGuard.observe(wallNow, monotonicNow);
+        long effectiveNow = Math.max(wallNow, lastPersistedObservedEpoch);
+        // Use the monotonic effective time floor when validating future timestamps.
+        // A backward system-clock adjustment must not make a previously valid
+        // Time Tracking record disappear from the overlay/group reconciliation.
+        List<BirdhouseTimer> currentTimers = readSavedTimers(effectiveNow);
+        timers = Collections.unmodifiableList(currentTimers);
 
+        List<BirdhousePlantingGroup> previousGroups = loadGroups();
+        boolean trackingActive = isTimeTrackingActive();
+        if (!trackingActive)
+        {
+            // Saved timers remain visible, but no new READY dispatch is allowed.
+            // Persist SKIPPED for any group whose estimated deadline passes during
+            // the inactive period so reactivation cannot produce a catch-up alert.
+            List<BirdhousePlantingGroup> skipped = BirdhouseGroupReconciler.skipOverdue(previousGroups, effectiveNow);
+            persistGroups(previousGroups, skipped);
+            trackingWasActive = false;
+            persistObservedEpoch(effectiveNow);
+            return;
+        }
+
+        boolean reconcileOnly = startupReconciliationPending || !trackingWasActive;
+        BirdhouseGroupReconciler.Result result = BirdhouseGroupReconciler.reconcile(
+            previousGroups, currentTimers, effectiveNow);
+        List<BirdhousePlantingGroup> nextGroups = new ArrayList<>(result.groups);
+
+        for (int i = 0; i < nextGroups.size(); i++)
+        {
+            BirdhousePlantingGroup group = nextGroups.get(i);
+            BirdhouseGroupDeadlinePolicy.Action action = BirdhouseGroupDeadlinePolicy.evaluate(
+                group, effectiveNow, result.newlyObservedGroupIds.contains(group.id),
+                reconcileOnly, clockDiscontinuity, wallNow);
+            if (action == BirdhouseGroupDeadlinePolicy.Action.WAIT)
+            {
+                continue;
+            }
+            if (action == BirdhouseGroupDeadlinePolicy.Action.SKIP)
+            {
+                nextGroups.set(i, group.terminal(BirdhousePlantingGroup.Status.SKIPPED));
+            }
+            else
+            {
+                nextGroups.set(i, group.terminal(BirdhousePlantingGroup.Status.DISPATCHED));
+                // Persist terminal state before dispatch. A process interruption
+                // must not replay an attempted group on the next tick or restart.
+                persistGroups(previousGroups, nextGroups);
+                nextGroups = attemptGroupChannels(nextGroups, i);
+                previousGroups = new ArrayList<>(nextGroups);
+            }
+        }
+
+        persistGroups(previousGroups, nextGroups);
+        startupReconciliationPending = false;
+        trackingWasActive = true;
+        persistObservedEpoch(effectiveNow);
+    }
+
+    private List<BirdhouseTimer> readSavedTimers(long nowSeconds)
+    {
         List<BirdhouseTimer> active = new ArrayList<>(4);
-        List<BirdhouseTimer> newlyWarned = new ArrayList<>(4);
-        int lead = config.warningLeadTime().minutes;
         for (BirdhouseSite site : BirdhouseSite.displayOrder())
         {
             String saved = configManager.getRSProfileConfiguration(
                 SOURCE_GROUP, "birdhouse." + site.varp);
-            BirdhouseTimer timer = BirdhouseTimer.parse(site, saved, now);
-            if (timer == null)
+            BirdhouseTimer timer = BirdhouseTimer.parse(site, saved, nowSeconds);
+            if (timer != null)
             {
-                continue;
-            }
-            active.add(timer);
-            long remaining = timer.secondsRemaining(now);
-            // A separate per-site 50-minute READY marker ensures that READY and
-            // advance-warning notifications never suppress one another.
-            // The cycle key changes after replanting.
-            if (remaining <= 0)
-            {
-                String readyKey = "ready." + site.varp;
-                String lastReadyCycle = configManager.getRSProfileConfiguration(OWN_GROUP, readyKey);
-                if (BirdhouseReadyCycleGate.isNewCycle(lastReadyCycle, timer.cycleKey))
-                {
-                    readyBatcher.add(timer, now);
-                }
-            }
-            else if (lead > 0 && remaining <= lead * 60L)
-            {
-                String warningKey = "warned." + site.varp;
-                String lastCycle = configManager.getRSProfileConfiguration(OWN_GROUP, warningKey);
-                if (!timer.cycleKey.equals(lastCycle))
-                {
-                    // Persist before notifying to avoid spamming on relaunch.
-                    configManager.setRSProfileConfiguration(OWN_GROUP, warningKey, timer.cycleKey);
-                    newlyWarned.add(timer);
-                }
+                active.add(timer);
             }
         }
-        timers = Collections.unmodifiableList(active);
-        if (!newlyWarned.isEmpty())
-        {
-            notifier.notify(BirdhouseWarningMessage.format(newlyWarned, lead));
-        }
+        return active;
     }
 
-    private void flushReadyBatch(long nowSeconds)
+    private List<BirdhousePlantingGroup> loadGroups()
     {
-        if (!readyBatcher.isDue(nowSeconds))
+        String profile = configManager.getRSProfileKey();
+        if (profile == null)
         {
-            return;
+            return new ArrayList<>();
         }
 
-        List<BirdhouseTimer> batch = readyBatcher.drain();
-        if (batch.isEmpty())
+        List<BirdhousePlantingGroup> groups = new ArrayList<>();
+        List<String> keys = configManager.getRSProfileConfigurationKeys(
+            OWN_GROUP, profile, GROUP_CONFIG_PREFIX);
+        for (String key : keys)
         {
-            return;
+            String encodedId = key.substring(GROUP_CONFIG_PREFIX.length());
+            String id = BirdhousePlantingGroup.decodeConfigKey(encodedId);
+            String value = configManager.getRSProfileConfiguration(OWN_GROUP, key);
+            BirdhousePlantingGroup group = BirdhousePlantingGroup.restore(id, value);
+            if (group != null)
+            {
+                groups.add(group);
+            }
         }
-
-        // Persist every site's cycle marker before dispatch, retaining the existing
-        // once-per-cycle guarantee for both red chat and desktop delivery.
-        for (BirdhouseTimer timer : batch)
-        {
-            configManager.setRSProfileConfiguration(OWN_GROUP,
-                "ready." + timer.site.varp, timer.cycleKey);
-        }
-        notificationDelivery.sendReady(config.readyRedChatEnabled(), config.readyDesktopEnabled());
+        return groups;
     }
 
+    private void persistGroups(List<BirdhousePlantingGroup> previous,
+        List<BirdhousePlantingGroup> current)
+    {
+        Set<String> currentIds = new HashSet<>();
+        for (BirdhousePlantingGroup group : current)
+        {
+            currentIds.add(group.id);
+            String key = GROUP_CONFIG_PREFIX + BirdhousePlantingGroup.encodeConfigKey(group.id);
+            configManager.setRSProfileConfiguration(OWN_GROUP, key, group.serialize());
+        }
+
+        for (BirdhousePlantingGroup group : previous)
+        {
+            if (!currentIds.contains(group.id) && group.isPending())
+            {
+                configManager.unsetRSProfileConfiguration(OWN_GROUP,
+                    GROUP_CONFIG_PREFIX + BirdhousePlantingGroup.encodeConfigKey(group.id));
+            }
+        }
+    }
+
+    private List<BirdhousePlantingGroup> attemptGroupChannels(List<BirdhousePlantingGroup> groups, int index)
+    {
+        List<BirdhousePlantingGroup> updated = new ArrayList<>(groups);
+        BirdhousePlantingGroup group = updated.get(index);
+        boolean chatEnabled = config.readyRedChatEnabled();
+        boolean desktopEnabled = config.readyDesktopEnabled();
+
+        // Mark enabled channels ATTEMPTING before invoking either delivery path.
+        // DISABLED is terminal too: changing a preference later does not replay a group.
+        group = group.withChatOutcome(chatEnabled
+            ? BirdhousePlantingGroup.ChannelOutcome.ATTEMPTING
+            : BirdhousePlantingGroup.ChannelOutcome.DISABLED);
+        group = group.withDesktopOutcome(desktopEnabled
+            ? BirdhousePlantingGroup.ChannelOutcome.ATTEMPTING
+            : BirdhousePlantingGroup.ChannelOutcome.DISABLED);
+        updated.set(index, group);
+        persistGroups(updated, updated);
+
+        // Use the same independent channel gate covered by regression tests. Each
+        // callback records its own outcome; a failed channel cannot block the other.
+        BirdhouseNotificationDelivery.dispatchReady(chatEnabled, desktopEnabled,
+            () -> attemptChatChannel(updated, index),
+            () -> attemptDesktopChannel(updated, index));
+        return updated;
+    }
+
+    private void attemptChatChannel(List<BirdhousePlantingGroup> groups, int index)
+    {
+        BirdhousePlantingGroup group = groups.get(index);
+        try
+        {
+            notificationDelivery.sendRedChat();
+            group = group.withChatOutcome(BirdhousePlantingGroup.ChannelOutcome.ATTEMPTED);
+        }
+        catch (RuntimeException ex)
+        {
+            group = group.withChatOutcome(BirdhousePlantingGroup.ChannelOutcome.FAILED);
+        }
+        groups.set(index, group);
+        persistGroups(groups, groups);
+    }
+
+    private void attemptDesktopChannel(List<BirdhousePlantingGroup> groups, int index)
+    {
+        BirdhousePlantingGroup group = groups.get(index);
+        try
+        {
+            notificationDelivery.sendDesktop();
+            group = group.withDesktopOutcome(BirdhousePlantingGroup.ChannelOutcome.ATTEMPTED);
+        }
+        catch (RuntimeException ex)
+        {
+            group = group.withDesktopOutcome(BirdhousePlantingGroup.ChannelOutcome.FAILED);
+        }
+        groups.set(index, group);
+        persistGroups(groups, groups);
+    }
+
+    private void persistObservedEpoch(long epochSeconds)
+    {
+        if (epochSeconds <= lastPersistedObservedEpoch
+            || lastPersistedObservedEpoch != Long.MIN_VALUE
+            && epochSeconds - lastPersistedObservedEpoch < CLOCK_PERSIST_INTERVAL_SECONDS)
+        {
+            return;
+        }
+        configManager.setRSProfileConfiguration(OWN_GROUP, LAST_OBSERVED_EPOCH_KEY, epochSeconds);
+        lastPersistedObservedEpoch = epochSeconds;
+    }
+
+    private static long parseEpoch(String value)
+    {
+        if (value == null)
+        {
+            return Long.MIN_VALUE;
+        }
+        try
+        {
+            return Long.parseLong(value);
+        }
+        catch (NumberFormatException ex)
+        {
+            return Long.MIN_VALUE;
+        }
+    }
 }

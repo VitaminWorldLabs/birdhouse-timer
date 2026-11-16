@@ -27,8 +27,8 @@ final class TimeTrackingDependencyStatus
         return active;
     }
 
-    static boolean shouldShowOverlayWarning(boolean demoMode, boolean initialized, boolean active)
+    static boolean shouldShowOverlayWarning(boolean initialized, boolean active)
     {
-        return !demoMode && initialized && !active;
+        return initialized && !active;
     }
 }

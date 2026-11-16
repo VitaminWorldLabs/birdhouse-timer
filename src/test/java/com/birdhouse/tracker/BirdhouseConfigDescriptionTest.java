@@ -9,7 +9,7 @@ import static org.junit.Assert.*;
 public class BirdhouseConfigDescriptionTest
 {
     private static final String READY_DEFINITION =
-        "READY: The standard 50-minute birdhouse timer has elapsed. The birdhouse is estimated to be ready for harvesting, but completion is not guaranteed.";
+        "READY: The standard 50-minute estimate has elapsed; actual harvestability is not guaranteed.";
 
     @Test
     public void exactDefinitionIsInAdvanceWarningConfigurationDescription() throws Exception

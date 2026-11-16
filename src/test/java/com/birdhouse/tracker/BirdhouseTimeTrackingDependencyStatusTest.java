@@ -29,14 +29,11 @@ public class BirdhouseTimeTrackingDependencyStatusTest
     }
 
     @Test
-    public void demoModeSuppressesDependencyWarningAndOverlayIndicator()
+    public void overlayWarningDependsOnlyOnKnownTrackingStatus()
     {
-        TimeTrackingDependencyStatus status = new TimeTrackingDependencyStatus();
-        assertFalse(status.update(false, false, false)); // caller suppresses chat while in Demo Mode
-        assertTrue(TimeTrackingDependencyStatus.shouldShowOverlayWarning(false, true, false));
-        assertFalse(TimeTrackingDependencyStatus.shouldShowOverlayWarning(true, true, false));
-        assertFalse(TimeTrackingDependencyStatus.shouldShowOverlayWarning(false, true, true));
-        assertFalse(TimeTrackingDependencyStatus.shouldShowOverlayWarning(false, false, false));
+        assertTrue(TimeTrackingDependencyStatus.shouldShowOverlayWarning(true, false));
+        assertFalse(TimeTrackingDependencyStatus.shouldShowOverlayWarning(true, true));
+        assertFalse(TimeTrackingDependencyStatus.shouldShowOverlayWarning(false, false));
     }
 
     @Test

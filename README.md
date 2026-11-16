@@ -1,54 +1,51 @@
 # Birdhouse Timer
 
-Birdhouse Timer is a RuneLite plugin for Old School RuneScape that displays independent estimated countdowns for the four Fossil Island birdhouse traps.
+**Version:** 1.2.0
+
+Birdhouse Timer displays four independent estimated countdowns for the Fossil Island birdhouse traps in a compact, movable RuneLite overlay.
 
 ## Features
 
-- A compact **190px overlay** showing Mushroom Meadow South, Mushroom Meadow North, Verdant Valley SW and Verdant Valley NE in that order.
-- A separate estimated timer for each seeded trap, based on the built-in RuneLite Time Tracking records.
-- Red (growing), yellow (inside the selected advance-warning window), and bright-green **READY** (the standard 50-minute estimate has elapsed). READY is an estimate, not confirmation that a trap is full or harvestable.
-- Configurable advance warnings: **Off / 5 / 10 / 15 minutes**.
-- Grouped, per-cycle READY alerts through red in-game chat and desktop notification, using: **"Birdhouse Timer: Your birdhouse traps may now be ready to reset."**
-- Independent READY delivery preferences for red in-game chat and desktop notifications. Both default to On. Turning both off does not affect the overlay or advance warnings.
-- Optional visual-only Demo Mode, available in the plugin configuration. It previews four simulated countdowns and does not change real tracking data or send notifications.
+- Four independent countdowns using RuneLite's built-in **Time Tracking** birdhouse records.
+- Compact overlay (approximately 190px wide) with the locations in this order: Mushroom Meadow South, Mushroom Meadow North, Verdant Valley SW, Verdant Valley NE.
+- Red growing state, configurable yellow visual warning, and bright-green **READY** (`#00FF00`) for each individual timer.
+- Visual advance-warning choices: **Off / 5 / 10 / 15 minutes**. The selected threshold changes the timer color only; no advance chat or desktop notifications are sent.
+- One consolidated READY notification per planting group. Planting cycles are ordered by planting time; consecutive gaps of five minutes or less remain in one group, while a gap greater than five minutes starts another group. The notification is attempted when the latest planting cycle in the group reaches its estimated 50-minute completion time.
+- Independent READY preferences for red in-game chat and desktop notifications. Both default to On.
+- A Time Tracking dependency warning with setup guidance.
+
+## Estimated readiness
+
+READY means the standard **50-minute estimate** has elapsed. It does not prove that a birdhouse is full or immediately harvestable. A READY timer remains visible until RuneLite Time Tracking observes a relevant change. The plugin does not impose an arbitrary expiration.
+
+Planting groups use consecutive planting-time gaps. For example, plantings at 10:00, 10:03 and 10:07 form one group with an estimated completion at 10:57. A planting at 10:15 starts another group with an estimated completion at 11:05.
+
+## Notifications and missed events
+
+- Earlier birdhouses in a group turn READY individually but do not send individual READY notifications.
+- One notification attempt is made per enabled channel when the latest timer in that group reaches its estimated READY time.
+- Chat and desktop delivery are independent. A disabled or failed channel does not trigger a duplicate through the other channel.
+- Desktop delivery respects RuneLite's focused-notification preference. Windows notification permissions and Do Not Disturb settings may still suppress a visible desktop banner.
+- If RuneLite is closed when a group becomes overdue, that notification is skipped. No catch-up notification is sent after restart.
+- When Time Tracking is disabled, new READY dispatch is suppressed. Groups that become overdue during the interruption are skipped during reconciliation; no delayed catch-up notification is sent.
+- Notification attempts are tracked independently from whether Windows visibly displays a banner. There are no automatic retries or repeated reminders.
 
 ## Required RuneLite plugin: Time Tracking
 
-Birdhouse Timer reads the saved birdhouse records maintained by RuneLite's built-in **Time Tracking** plugin. Enable Time Tracking in RuneLite for current planting and reset changes to be recorded.
+Birdhouse Timer reads per-account birdhouse records maintained by RuneLite's built-in **Time Tracking** plugin. It does not plant, harvest or reset traps, and it does not overwrite Time Tracking's underlying records.
 
-If Time Tracking is disabled or fails to start, Birdhouse Timer keeps displaying the last saved records where available, but those estimates may become out of date. The overlay displays an amber warning triangle, **Time Tracking Disabled**, and three setup instructions. Birdhouse Timer also sends one actionable red in-game warning per inactive period. The warning marker persists across client restarts and resets when Time Tracking becomes active again. Re-enabling Time Tracking removes the overlay warning and resumes normal observation. Birdhouse Timer does not fabricate timestamps or modify Time Tracking's records.
+Keep Time Tracking enabled so planting and reset changes can be recorded. RuneLite may reconcile birdhouse state changes only in supported Fossil Island areas. Saved records can be temporarily absent, stale or delayed after login, world changes, restarts or dependency interruptions. The plugin detects whether Time Tracking is active; it cannot independently detect every internal tracking failure while RuneLite still reports the plugin as active.
 
-While Time Tracking is inactive, saved timers and their advance/READY notifications continue to be calculated from the last saved records and may be stale. Treat those countdowns and alerts as uncertain until Time Tracking is active and has observed the relevant game state. The warning does not guarantee recovery of missed planting or reset events. RuneLite may reconcile birdhouse varp changes only in supported Fossil Island areas; a missed same-tier reset may remain stale until the built-in tracker observes a detectable change.
+The plugin excludes records it can identify as empty or unseeded. It cannot guarantee that every saved seeded record corresponds to a currently constructed physical birdhouse. Treat saved countdowns and maturity estimates as estimates, not authoritative proof of harvestability.
 
-## Notifications
+## Configuration migration
 
-READY preferences are independent:
+The previous player-facing Demo Mode option is no longer available. On startup, the plugin clears only the obsolete `demoMode` preference. Existing birdhouse records, timer data and the separate READY chat and desktop preferences are preserved.
 
-- **READY: Red in-game chat** (default On)
-- **READY: Windows desktop** (default On)
+## Support
 
-The advance-warning setting is separate. If both READY channels are disabled, the overlay and advance warnings continue normally. READY markers are tracked per location and planted cycle, so enabling a channel again during an already-notified cycle does not replay that cycle.
-
-Desktop READY notifications follow RuneLite's global **Send notifications when focused** setting at the moment they are sent. When the setting is Off and RuneLite is focused, desktop delivery is suppressed while red chat remains independent. Windows notification permissions and Do Not Disturb can also affect desktop presentation.
-
-Traps first observed READY within the same fixed 10-second coalescing window are consolidated into one chat/desktop dispatch. This can delay the first alert by up to 10 seconds. Events separated by more than that window are delivered in separate batches. A blocked notification after dispatch is not automatically retried during the same cycle.
-
-## Demo Mode
-
-Demo Mode is a visual-only preview of four simulated countdown states. The overlay title is **Birdhouse Timers** and is marked **Birdhouse Timers [DM]** in Demo Mode (`DM` indicates the visual Demo Mode preview). Demo Mode does not require Time Tracking, does not read or modify real birdhouse records or notification markers, and does not send advance, READY, or dependency-warning messages.
-
-## How tracking works
-
-Birdhouse Timer reads RuneLite's saved per-account birdhouse Time Tracking values. It does not interact with the game or plant/reset traps. It uses the standard **50-minute estimate**. Actual birdhouse completion can vary, so READY does not guarantee that the trap is harvestable. Notification markers are stored separately per location and planted cycle to suppress duplicates.
-
-## Installation
-
-Install **Birdhouse Timer** from RuneLite's Plugin Hub using the normal RuneLite client. Enable the built-in Time Tracking plugin, then configure advance warnings, READY channels, and Demo Mode as desired.
-
-## Source and support
-
-https://github.com/VitaminWorldLabs/birdhouse-timer
+Report issues at: https://github.com/VitaminWorldLabs/birdhouse-timer/issues
 
 ## Disclaimer
 
-Third-party RuneLite plugin, not affiliated with or endorsed by Jagex or RuneLite.
+Third-party RuneLite plugin. Not affiliated with or endorsed by Jagex or RuneLite.

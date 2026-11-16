@@ -17,7 +17,6 @@ final class BirdhouseOverlay extends OverlayPanel
     static final int COMPACT_WIDTH_PX = 190;
     static final String EMPTY_STATE_MESSAGE = "No active birdhouses";
     static final String TITLE = "Birdhouse Timers";
-    static final String DEMO_TITLE = TITLE + " [DM]";
     static final String TIME_TRACKING_INSTRUCTION_1 = "1. Open Configuration (wrench)";
     static final String TIME_TRACKING_INSTRUCTION_2 = "2. Search Time Tracking";
     static final String TIME_TRACKING_INSTRUCTION_3 = "3. Enable Time Tracking";
@@ -45,12 +44,11 @@ final class BirdhouseOverlay extends OverlayPanel
         List<BirdhouseTimer> timers = plugin.getTimers();
         panelComponent.setPreferredSize(new Dimension(COMPACT_WIDTH_PX, 0));
         panelComponent.getChildren().add(TitleComponent.builder()
-            .text(config.demoMode() ? DEMO_TITLE : TITLE)
+            .text(TITLE)
             .build());
 
         boolean dependencyWarning = TimeTrackingDependencyStatus.shouldShowOverlayWarning(
-            config.demoMode(), plugin.isTimeTrackingStatusKnownForOverlay(),
-            plugin.isTimeTrackingActiveForOverlay());
+            plugin.isTimeTrackingStatusKnownForOverlay(), plugin.isTimeTrackingActiveForOverlay());
         if (dependencyWarning)
         {
             panelComponent.getChildren().add(new BirdhouseDependencyWarningComponent());

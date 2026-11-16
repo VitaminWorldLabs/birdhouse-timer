@@ -18,7 +18,6 @@ public class BirdhouseCompactLayoutTest
     public void overlayUsesTheApprovedTitleAndFitsTheCompactWidth()
     {
         assertEquals("Birdhouse Timers", BirdhouseOverlay.TITLE);
-        assertEquals("Birdhouse Timers [DM]", BirdhouseOverlay.DEMO_TITLE);
         assertEquals(190, BirdhouseOverlay.COMPACT_WIDTH_PX);
 
         java.awt.Graphics2D graphics = new java.awt.image.BufferedImage(
@@ -28,9 +27,7 @@ public class BirdhouseCompactLayoutTest
             graphics.setFont(new java.awt.Font("Dialog", java.awt.Font.PLAIN, 16));
             int contentWidth = BirdhouseOverlay.COMPACT_WIDTH_PX - 8; // RuneLite's 4px border on each side.
             int titleWidth = graphics.getFontMetrics().stringWidth(BirdhouseOverlay.TITLE);
-            int demoTitleWidth = graphics.getFontMetrics().stringWidth(BirdhouseOverlay.DEMO_TITLE);
             assertTrue(titleWidth <= contentWidth);
-            assertTrue(demoTitleWidth <= contentWidth);
         }
         finally
         {

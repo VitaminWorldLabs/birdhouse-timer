@@ -1,34 +1,32 @@
 package com.birdhouse.tracker;
 
+import java.lang.reflect.Method;
 import net.runelite.client.config.ConfigItem;
 import org.junit.Test;
 import static org.junit.Assert.*;
 
-/** The released plugin keeps the visual-only Demo Mode available to players. */
+/** BH-DEC-001: public configuration cannot enable the developer-only preview. */
 public class BirdhouseDemoModeVisibilityTest
 {
     @Test
-    public void demoModeIsPlayerVisibleAndUsesTheExistingPublicKey() throws Exception
+    public void demoModeIsAbsentFromPublicConfiguration() throws Exception
     {
-        ConfigItem item = BirdhouseTrackerConfig.class.getMethod("demoMode").getAnnotation(ConfigItem.class);
-        assertNotNull(item);
-        assertFalse(item.hidden());
-        assertEquals("demoMode", item.keyName());
-        assertEquals("Demo mode", item.name());
-        assertTrue(item.description().contains("visual-only"));
-    }
-
-    @Test
-    public void demoModeDefaultsOff()
-    {
-        BirdhouseTrackerConfig config = new BirdhouseTrackerConfig() { };
-        assertFalse(config.demoMode());
+        for (Method method : BirdhouseTrackerConfig.class.getDeclaredMethods())
+        {
+            assertNotEquals("demoMode", method.getName());
+            ConfigItem item = method.getAnnotation(ConfigItem.class);
+            if (item != null)
+            {
+                assertNotEquals("demoMode", item.keyName());
+                assertFalse(item.name().toLowerCase(java.util.Locale.ROOT).contains("demo mode"));
+            }
+        }
     }
 
     @Test
     public void developerControlsAreNotPartOfPlayerConfiguration()
     {
-        for (java.lang.reflect.Method method : BirdhouseTrackerConfig.class.getMethods())
+        for (Method method : BirdhouseTrackerConfig.class.getMethods())
         {
             ConfigItem item = method.getAnnotation(ConfigItem.class);
             if (item != null)

@@ -21,7 +21,7 @@ final class BirdhouseTimer
         this.site = site;
         this.varpValue = varpValue;
         this.plantedAt = plantedAt;
-        this.cycleKey = varpValue + ":" + plantedAt;
+        this.cycleKey = site.varp + ":" + varpValue + ":" + plantedAt;
     }
 
     /** Return null for empty, built-but-unseeded, missing, or invalid states. */
@@ -56,28 +56,6 @@ final class BirdhouseTimer
         {
             return null;
         }
-    }
-
-    /**
-     * Purely illustrative countdowns. Demo values are never stored in RuneLite
-     * configuration and never represent a player's actual birdhouses.
-     */
-    static List<BirdhouseTimer> demoTimers(long startedAt)
-    {
-        // READY, 4 minutes, 15 minutes and 42 minutes at demo start.
-        int[] secondsAlreadyElapsed = {55 * 60, 46 * 60, 35 * 60, 8 * 60};
-        List<BirdhouseSite> sites = BirdhouseSite.displayOrder();
-        List<BirdhouseTimer> result = new ArrayList<>(sites.size());
-        for (int i = 0; i < sites.size(); i++)
-        {
-            // "3" is a seeded tier in RuneLite's birdhouse varp encoding.
-            BirdhouseTimer timer = parse(sites.get(i), "3:" + (startedAt - secondsAlreadyElapsed[i]), startedAt);
-            if (timer != null)
-            {
-                result.add(timer);
-            }
-        }
-        return Collections.unmodifiableList(result);
     }
 
     long secondsRemaining(long nowSeconds)
